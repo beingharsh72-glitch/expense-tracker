@@ -116,7 +116,9 @@
       <input type="text" id="cfgUrl" placeholder="https://xxxx.supabase.co" />
       <input type="text" id="cfgKey" placeholder="anon public key (eyJ…)" />
       <button class="btn-setup" id="cfgSave">Save & Connect</button>
+      <button class="btn-setup" id="cfgTest" style="background:#378ADD">Test</button>
     </div>
+    <div id="debugBox" style="display:none;margin-top:10px;background:rgba(0,0,0,0.06);border-radius:8px;padding:10px 12px;font-size:12px;font-family:monospace;line-height:1.7;white-space:pre-wrap;color:var(--text2);max-height:200px;overflow-y:auto"></div>
   </div>
 
   <div class="month-header">
@@ -179,7 +181,10 @@
 </div>
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+const { createClient } = supabase;
+
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const CAT_COLORS = {Food:'#1D9E75',Transport:'#378ADD',Utilities:'#EF9F27',Health:'#E24B4A',Education:'#7F77DD',Shopping:'#D4537E',Entertainment:'#D85A30',Other:'#888780'};
 const CAT_ICONS  = {Food:'🍛',Transport:'🚗',Utilities:'💡',Health:'💊',Education:'📚',Shopping:'🛍️',Entertainment:'🎬',Other:'📦'};
@@ -187,9 +192,9 @@ const LS_URL = 'ei_sb_url', LS_KEY = 'ei_sb_key', LS_EXP = 'ei_exp_', LS_MEM = '
 
 let curMonth = new Date().getMonth(), curYear = new Date().getFullYear();
 let expenses = [], members = ['Harsh','Ifra'], selMember = 'Harsh';
-let sbUrl = '', sbKey = '', isCloud = false, pollTimer = null;
+let sbClient = null, isCloud = false, pollTimer = null;
 
-const fmt = n => '₹' + Math.round(n).toLocaleString('en-IN');
+const fmt = n => '\u20b9' + Math.round(n).toLocaleString('en-IN');
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const mKey = () => `${curYear}_${curMonth}`;
 
@@ -201,34 +206,16 @@ function setSync(html, state) {
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2000);
+  setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-// ── SUPABASE REST ────────────────────────────────────────────────────────────
-async function sbGet(table, id) {
-  const r = await fetch(`${sbUrl}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}&select=*`, {
-    headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`, 'Content-Type': 'application/json' }
-  });
-  if (!r.ok) throw new Error(r.status);
-  const arr = await r.json();
-  return arr[0] || null;
-}
-async function sbUpsert(table, row) {
-  const r = await fetch(`${sbUrl}/rest/v1/${table}`, {
-    method: 'POST',
-    headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
-    body: JSON.stringify(row)
-  });
-  if (!r.ok) throw new Error(r.status);
-}
-
-// ── CLOUD DATA ───────────────────────────────────────────────────────────────
+// ── SUPABASE SDK ─────────────────────────────────────────────────────────────
 async function cloudLoad() {
   setSync('<span class="spinner"></span> Syncing…', 'warn');
   try {
-    const [expRow, memRow] = await Promise.all([
-      sbGet('expenses', mKey()),
-      sbGet('members', 'family')
+    const [{ data: expRow }, { data: memRow }] = await Promise.all([
+      sbClient.from('expenses').select('data').eq('id', mKey()).maybeSingle(),
+      sbClient.from('members').select('list').eq('id', 'family').maybeSingle()
     ]);
     expenses = expRow ? expRow.data : [];
     if (memRow && Array.isArray(memRow.list) && memRow.list.length) members = memRow.list;
@@ -236,32 +223,39 @@ async function cloudLoad() {
     setSync('<span class="live-dot"></span>Live — synced', '');
     startPoll();
   } catch(e) {
-    setSync('⚠ Sync error', 'err');
-    loadLocal(); // fallback
+    setSync('\u26a0 ' + (e.message||'Sync error'), 'err');
+    document.getElementById('setupCard').style.display = 'block';
+    loadLocal();
   }
 }
+
 async function cloudSave() {
   setSync('<span class="spinner"></span> Saving…', 'warn');
   try {
-    await Promise.all([
-      sbUpsert('expenses', { id: mKey(), data: expenses }),
-      sbUpsert('members', { id: 'family', list: members })
-    ]);
+    const { error: e1 } = await sbClient.from('expenses').upsert({ id: mKey(), data: expenses });
+    const { error: e2 } = await sbClient.from('members').upsert({ id: 'family', list: members });
+    if (e1) throw new Error(e1.message);
+    if (e2) throw new Error(e2.message);
     setSync('<span class="live-dot"></span>Live — synced', '');
   } catch(e) {
-    setSync('⚠ Save failed', 'err');
-    showToast('Could not save — check connection');
+    setSync('\u26a0 Save failed: ' + (e.message||''), 'err');
+    showToast('Save failed: ' + (e.message||''));
   }
 }
+
 function startPoll() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(async () => {
     try {
-      const row = await sbGet('expenses', mKey());
-      const remote = row ? row.data : [];
+      const { data } = await sbClient.from('expenses').select('data').eq('id', mKey()).maybeSingle();
+      const remote = data ? data.data : [];
       const rIds = JSON.stringify([...remote].map(e=>e.id).sort());
       const lIds = JSON.stringify([...expenses].map(e=>e.id).sort());
-      if (rIds !== lIds) { expenses = remote; renderAll(); showToast('Updated by family member'); setSync('<span class="live-dot"></span>Live — synced',''); }
+      if (rIds !== lIds) {
+        expenses = remote; renderAll();
+        showToast('Updated by a family member ✓');
+        setSync('<span class="live-dot"></span>Live — synced', '');
+      }
     } catch(e) {}
   }, 8000);
 }
@@ -273,7 +267,7 @@ function loadLocal() {
     const m = localStorage.getItem(LS_MEM); if (m) { const p=JSON.parse(m); if(p.length) members=p; }
   } catch(e) { expenses=[]; }
   renderAll();
-  if (!isCloud) setSync('💾 Saved locally (setup cloud above)', 'warn');
+  if (!isCloud) setSync('💾 Local mode (setup cloud above)', 'warn');
 }
 function saveLocal() {
   localStorage.setItem(LS_EXP + mKey(), JSON.stringify(expenses));
@@ -300,8 +294,8 @@ function renderSummary() {
   document.getElementById('sMembers').textContent=uniq; document.getElementById('sAvg').textContent=fmt(avg);
   const bc={}; expenses.forEach(e=>bc[e.category]=(bc[e.category]||0)+e.amount);
   const top=Object.entries(bc).sort((a,b)=>b[1]-a[1])[0];
-  document.getElementById('sTopCat').textContent=top?CAT_ICONS[top[0]]+' '+top[0]:'—';
-  document.getElementById('sTopAmt').textContent=top?fmt(top[1]):'₹0';
+  document.getElementById('sTopCat').textContent=top?CAT_ICONS[top[0]]+' '+top[0]:'\u2014';
+  document.getElementById('sTopAmt').textContent=top?fmt(top[1]):'\u20b90';
 }
 function renderList() {
   const list=document.getElementById('expList'), sorted=[...expenses].sort((a,b)=>b.ts-a.ts);
@@ -348,21 +342,60 @@ document.getElementById('newMemberIn').addEventListener('keydown', async e=>{
 document.getElementById('prevBtn').onclick = ()=>{ if(pollTimer)clearInterval(pollTimer); curMonth--;if(curMonth<0){curMonth=11;curYear--;} isCloud?cloudLoad():loadLocal(); };
 document.getElementById('nextBtn').onclick = ()=>{ if(pollTimer)clearInterval(pollTimer); curMonth++;if(curMonth>11){curMonth=0;curYear++;} isCloud?cloudLoad():loadLocal(); };
 
-// ── SETUP FORM ────────────────────────────────────────────────────────────────
+// ── TEST BUTTON ───────────────────────────────────────────────────────────────
+function dbg(msg) {
+  const box = document.getElementById('debugBox');
+  box.style.display = 'block';
+  box.textContent += msg + '\n';
+  box.scrollTop = box.scrollHeight;
+}
+document.getElementById('cfgTest').onclick = async () => {
+  const box = document.getElementById('debugBox');
+  box.style.display = 'block'; box.textContent = '';
+  const u = document.getElementById('cfgUrl').value.trim().replace(/\/$/,'');
+  const k = document.getElementById('cfgKey').value.trim();
+  if (!u || !k) { dbg('Please fill in URL and API key first'); return; }
+  dbg('Testing with Supabase SDK...');
+  try {
+    const testClient = createClient(u, k);
+    dbg('[1] Connecting...');
+    const { data, error } = await testClient.from('expenses').select('id').limit(1);
+    if (error) {
+      dbg('    ERROR: ' + error.message + ' (code: ' + error.code + ')');
+      if (error.code === 'PGRST301' || error.message.includes('JWT')) dbg('    FIX: API key is wrong — copy the "anon public" key from Supabase Settings > API');
+      else if (error.code === '42P01') dbg('    FIX: Table not found — run the SQL in Supabase SQL Editor');
+      else if (error.code === '42501' || error.message.includes('policy')) dbg('    FIX: RLS blocking — run the policy SQL in Supabase SQL Editor');
+      else dbg('    FIX: Check your Project URL is correct (Settings > API > Project URL)');
+    } else {
+      dbg('    OK: Connected! expenses table found');
+      const { error: e2 } = await testClient.from('members').select('id').limit(1);
+      if (e2) dbg('[2] members table ERROR: ' + e2.message + '\n    FIX: Run the SQL block above');
+      else dbg('[2] OK: members table found');
+      dbg('\nAll checks passed! Click Save & Connect.');
+    }
+  } catch(e) {
+    dbg('    NETWORK ERROR: ' + e.message);
+    dbg('    FIX: Make sure the URL is exactly like: https://abcxyz.supabase.co');
+  }
+};
+
+// ── SETUP SAVE ────────────────────────────────────────────────────────────────
 document.getElementById('cfgSave').onclick = () => {
   const u=document.getElementById('cfgUrl').value.trim().replace(/\/$/,'');
   const k=document.getElementById('cfgKey').value.trim();
   if(!u||!k){showToast('Please fill both fields');return;}
   localStorage.setItem(LS_URL,u); localStorage.setItem(LS_KEY,k);
-  sbUrl=u; sbKey=k; isCloud=true;
+  sbClient = createClient(u, k);
+  isCloud=true;
   document.getElementById('setupCard').style.display='none';
   cloudLoad();
 };
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
-sbUrl = localStorage.getItem(LS_URL)||'';
-sbKey = localStorage.getItem(LS_KEY)||'';
-if(sbUrl && sbKey) {
+const savedUrl = localStorage.getItem(LS_URL)||'';
+const savedKey = localStorage.getItem(LS_KEY)||'';
+if(savedUrl && savedKey) {
+  sbClient = createClient(savedUrl, savedKey);
   isCloud = true;
   cloudLoad();
 } else {
