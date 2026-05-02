@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Expense Tracker - Harsh & Ifra</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f5f4f0; --surface: #fff; --surface2: #f0efeb;
+      --border: rgba(0,0,0,0.09); --border2: rgba(0,0,0,0.16);
+      --text: #1a1a18; --text2: #6b6b68; --text3: #a0a09c;
+      --green: #1D9E75; --red: #E24B4A;
+      --radius: 10px; --radius-lg: 14px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#1a1a18; --surface:#242422; --surface2:#2e2e2c; --border:rgba(255,255,255,0.09); --border2:rgba(255,255,255,0.16); --text:#f0efe9; --text2:#9a9a96; --text3:#66665e; }
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    .topbar { background: var(--surface); border-bottom: 0.5px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; gap: 10px; }
+    .logo { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; white-space: nowrap; }
+    .logo span { color: var(--green); }
+    .sync-pill { font-size: 12px; padding: 4px 11px; border-radius: 20px; font-weight: 500; white-space: nowrap; display: flex; align-items: center; gap: 5px; background: #e1f5ee; color: #0F6E56; }
+    .sync-pill.warn { background: #faeeda; color: #854F0B; }
+    .sync-pill.err  { background: #fcebeb; color: #A32D2D; }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.35} }
+    .spinner { display:inline-block; width:11px; height:11px; border:2px solid currentColor; border-top-color:transparent; border-radius:50%; animation:spin .7s linear infinite; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    .container { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
+
+    /* SETUP CARD */
+    .setup-card { background: var(--surface); border: 1.5px solid #EF9F27; border-radius: var(--radius-lg); padding: 1.25rem 1.5rem; margin-bottom: 1.25rem; }
+    .setup-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 10px; color: #854F0B; }
+    .setup-steps { display: flex; flex-direction: column; gap: 8px; }
+    .setup-step { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.55; color: var(--text2); }
+    .step-num { background: #EF9F27; color: #fff; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; margin-top: 1px; }
+    .setup-step a { color: #854F0B; font-weight: 500; }
+    .setup-step code { background: rgba(0,0,0,0.07); padding: 1px 5px; border-radius: 4px; font-size: 11px; font-family: monospace; }
+    .setup-input-row { display: flex; gap: 8px; margin-top: 10px; }
+    .setup-input-row input { flex: 1; height: 36px; padding: 0 10px; font-size: 13px; border: 0.5px solid var(--border2); border-radius: 8px; background: var(--surface2); color: var(--text); outline: none; }
+    .setup-input-row input:focus { border-color: var(--green); }
+    .btn-setup { height: 36px; padding: 0 16px; border-radius: 8px; border: none; background: var(--green); color: #fff; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+    .btn-setup:hover { opacity: .88; }
+
+    .month-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 10px; }
+    .month-header h2 { font-size: 22px; font-weight: 600; }
+    .month-nav { display: flex; align-items: center; gap: 6px; }
+    .month-nav button { background: var(--surface); border: 0.5px solid var(--border); border-radius: 8px; width: 32px; height: 32px; font-size: 16px; cursor: pointer; color: var(--text); display: flex; align-items: center; justify-content: center; }
+    .month-nav button:hover { background: var(--surface2); }
+    .month-name { font-size: 15px; font-weight: 500; min-width: 140px; text-align: center; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 10px; margin-bottom: 1.25rem; }
+    .stat { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1rem; }
+    .stat .lbl { font-size: 11px; color: var(--text2); font-weight: 500; letter-spacing: .05em; text-transform: uppercase; margin-bottom: 5px; }
+    .stat .val { font-size: 22px; font-weight: 600; }
+    .stat .sub { font-size: 12px; color: var(--text3); margin-top: 3px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    @media (max-width:600px) { .grid2 { grid-template-columns:1fr; } }
+    .card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; }
+    .card-title { font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--text2); margin-bottom: 14px; }
+    .form-col { display: flex; flex-direction: column; gap: 10px; }
+    .form-row2 { display: flex; gap: 8px; }
+    .form-row2 > * { flex: 1; min-width: 0; }
+    input[type="text"], input[type="number"], select { width: 100%; height: 38px; padding: 0 12px; font-size: 14px; border: 0.5px solid var(--border2); border-radius: 8px; background: var(--surface2); color: var(--text); outline: none; transition: border-color .15s; }
+    input:focus, select:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(29,158,117,.12); }
+    .member-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+    .chip { font-size: 12px; padding: 5px 12px; border-radius: 20px; border: 0.5px solid var(--border2); background: var(--surface2); color: var(--text2); cursor: pointer; user-select: none; transition: all .15s; }
+    .chip.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .btn-add { height: 38px; border-radius: 8px; border: none; font-size: 14px; font-weight: 500; cursor: pointer; background: var(--green); color: #fff; width: 100%; transition: opacity .15s; }
+    .btn-add:hover { opacity: .88; }
+    .btn-add:disabled { opacity: .4; cursor: not-allowed; }
+    .expense-list { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; }
+    .expense-list::-webkit-scrollbar { width: 4px; }
+    .expense-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+    .empty { font-size: 13px; color: var(--text3); text-align: center; padding: 1.5rem 0; }
+    .exp-item { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 9px; background: var(--surface2); animation: fadeIn .2s ease; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(-3px)} to{opacity:1;transform:none} }
+    .cat-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .exp-info { flex: 1; min-width: 0; }
+    .exp-desc { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .exp-meta { font-size: 11px; color: var(--text3); margin-top: 1px; }
+    .exp-amt { font-size: 14px; font-weight: 600; white-space: nowrap; }
+    .exp-del { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 13px; padding: 3px 5px; border-radius: 5px; }
+    .exp-del:hover { color: var(--red); background: #fcebeb; }
+    .bars { display: flex; flex-direction: column; gap: 11px; }
+    .bar-row { display: flex; align-items: center; gap: 10px; }
+    .bar-lbl { font-size: 12px; color: var(--text2); min-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar-track { flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width .4s ease; }
+    .bar-val { font-size: 12px; color: var(--text2); min-width: 70px; text-align: right; }
+    .footer { text-align: center; font-size: 12px; color: var(--text3); margin-top: 2rem; padding-bottom: 2rem; line-height: 1.8; }
+    .toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); font-size: 13px; padding: 9px 18px; border-radius: 20px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 999; white-space: nowrap; }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">Expense Tracker <span>Harsh & Ifra</span></div>
+  <div class="sync-pill warn" id="syncPill"><span class="spinner"></span> Connecting…</div>
+</div>
+
+<div class="container">
+
+  <!-- ── SETUP CARD (hidden once configured) ── -->
+  <div class="setup-card" id="setupCard" style="display:none">
+    <h3>⚙️ 2-minute setup — enable shared sync for your family</h3>
+    <div class="setup-steps">
+      <div class="setup-step"><span class="step-num">1</span><span>Go to <a href="https://supabase.com" target="_blank">supabase.com</a> → <strong>Start your project</strong> (free, no credit card)</span></div>
+      <div class="setup-step"><span class="step-num">2</span><span>Create a new project → wait ~1 min for it to spin up</span></div>
+      <div class="setup-step"><span class="step-num">3</span><span>Go to <strong>SQL Editor</strong> → paste and run this: <code>create table expenses (id text primary key, data jsonb); create table members (id text primary key, list jsonb);</code></span></div>
+      <div class="setup-step"><span class="step-num">4</span><span>Go to <strong>Project Settings → API</strong> → copy your <strong>Project URL</strong> and <strong>anon public key</strong></span></div>
+      <div class="setup-step"><span class="step-num">5</span><span>Paste them below and click Save — your family will instantly share data!</span></div>
+    </div>
+    <div class="setup-input-row">
+      <input type="text" id="cfgUrl" placeholder="https://xxxx.supabase.co" />
+      <input type="text" id="cfgKey" placeholder="anon public key (eyJ…)" />
+      <button class="btn-setup" id="cfgSave">Save & Connect</button>
+      <button class="btn-setup" id="cfgTest" style="background:#378ADD">Test</button>
+    </div>
+    <div id="debugBox" style="display:none;margin-top:10px;background:rgba(0,0,0,0.06);border-radius:8px;padding:10px 12px;font-size:12px;font-family:monospace;line-height:1.7;white-space:pre-wrap;color:var(--text2);max-height:200px;overflow-y:auto"></div>
+  </div>
+
+  <div class="month-header">
+    <h2 id="pageTitle">—</h2>
+    <div class="month-nav">
+      <button id="prevBtn">&#8249;</button>
+      <span class="month-name" id="monthName">—</span>
+      <button id="nextBtn">&#8250;</button>
+    </div>
+  </div>
+
+  <div class="summary">
+    <div class="stat"><div class="lbl">Total Spent</div><div class="val" id="sTotal">₹0</div><div class="sub" id="sCount">0 entries</div></div>
+    <div class="stat"><div class="lbl">Top Category</div><div class="val" id="sTopCat">—</div><div class="sub" id="sTopAmt">₹0</div></div>
+    <div class="stat"><div class="lbl">Members Active</div><div class="val" id="sMembers">0</div><div class="sub">this month</div></div>
+    <div class="stat"><div class="lbl">Avg Per Entry</div><div class="val" id="sAvg">₹0</div><div class="sub">per expense</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">Add Expense</div>
+      <div class="form-col">
+        <input type="text" id="descIn" placeholder="Description (e.g. Groceries)" maxlength="60" />
+        <div class="form-row2">
+          <input type="number" id="amtIn" placeholder="Amount (₹)" min="1" />
+          <select id="catIn">
+            <option value="Food">🍛 Food</option>
+            <option value="Transport">🚗 Transport</option>
+            <option value="Utilities">💡 Utilities</option>
+            <option value="Health">💊 Health</option>
+            <option value="Education">📚 Education</option>
+            <option value="Shopping">🛍️ Shopping</option>
+            <option value="Entertainment">🎬 Entertainment</option>
+            <option value="Other">📦 Other</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:7px;">Who's adding?</div>
+          <div class="member-row" id="memberChips"></div>
+          <input type="text" id="newMemberIn" placeholder="+ Type name & press Enter to add" style="height:34px;font-size:13px;" />
+        </div>
+        <button class="btn-add" id="addBtn">Add Expense</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">This Month's Expenses</div>
+      <div class="expense-list" id="expList"><div class="empty">Loading…</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Spending by Category</div>
+    <div class="bars" id="bars"><div class="empty">Loading…</div></div>
+  </div>
+
+  <div class="footer">
+    Expense Tracker · Harsh & Ifra &nbsp;·&nbsp; All expenses shared across family devices ✓<br>Built with ♥
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const { createClient } = supabase;
+
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const CAT_COLORS = {Food:'#1D9E75',Transport:'#378ADD',Utilities:'#EF9F27',Health:'#E24B4A',Education:'#7F77DD',Shopping:'#D4537E',Entertainment:'#D85A30',Other:'#888780'};
+const CAT_ICONS  = {Food:'🍛',Transport:'🚗',Utilities:'💡',Health:'💊',Education:'📚',Shopping:'🛍️',Entertainment:'🎬',Other:'📦'};
+const LS_URL = 'ei_sb_url', LS_KEY = 'ei_sb_key', LS_EXP = 'ei_exp_', LS_MEM = 'ei_members';
+
+let curMonth = new Date().getMonth(), curYear = new Date().getFullYear();
+let expenses = [], members = ['Harsh','Ifra'], selMember = 'Harsh';
+let sbClient = null, isCloud = false, pollTimer = null;
+
+const fmt = n => '\u20b9' + Math.round(n).toLocaleString('en-IN');
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const mKey = () => `${curYear}_${curMonth}`;
+
+function setSync(html, state) {
+  const el = document.getElementById('syncPill');
+  el.innerHTML = html;
+  el.className = 'sync-pill' + (state==='err'?' err':state==='warn'?' warn':'');
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── SUPABASE SDK ─────────────────────────────────────────────────────────────
+async function cloudLoad() {
+  setSync('<span class="spinner"></span> Syncing…', 'warn');
+  try {
+    const [{ data: expRow }, { data: memRow }] = await Promise.all([
+      sbClient.from('expenses').select('data').eq('id', mKey()).maybeSingle(),
+      sbClient.from('members').select('list').eq('id', 'family').maybeSingle()
+    ]);
+    expenses = expRow ? expRow.data : [];
+    if (memRow && Array.isArray(memRow.list) && memRow.list.length) members = memRow.list;
+    renderAll();
+    setSync('<span class="live-dot"></span>Live — synced', '');
+    startPoll();
+  } catch(e) {
+    setSync('\u26a0 ' + (e.message||'Sync error'), 'err');
+    document.getElementById('setupCard').style.display = 'block';
+    loadLocal();
+  }
+}
+
+async function cloudSave() {
+  setSync('<span class="spinner"></span> Saving…', 'warn');
+  try {
+    const { error: e1 } = await sbClient.from('expenses').upsert({ id: mKey(), data: expenses });
+    const { error: e2 } = await sbClient.from('members').upsert({ id: 'family', list: members });
+    if (e1) throw new Error(e1.message);
+    if (e2) throw new Error(e2.message);
+    setSync('<span class="live-dot"></span>Live — synced', '');
+  } catch(e) {
+    setSync('\u26a0 Save failed: ' + (e.message||''), 'err');
+    showToast('Save failed: ' + (e.message||''));
+  }
+}
+
+function startPoll() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    try {
+      const { data } = await sbClient.from('expenses').select('data').eq('id', mKey()).maybeSingle();
+      const remote = data ? data.data : [];
+      const rIds = JSON.stringify([...remote].map(e=>e.id).sort());
+      const lIds = JSON.stringify([...expenses].map(e=>e.id).sort());
+      if (rIds !== lIds) {
+        expenses = remote; renderAll();
+        showToast('Updated by a family member ✓');
+        setSync('<span class="live-dot"></span>Live — synced', '');
+      }
+    } catch(e) {}
+  }, 8000);
+}
+
+// ── LOCAL FALLBACK ───────────────────────────────────────────────────────────
+function loadLocal() {
+  try {
+    const r = localStorage.getItem(LS_EXP + mKey()); expenses = r ? JSON.parse(r) : [];
+    const m = localStorage.getItem(LS_MEM); if (m) { const p=JSON.parse(m); if(p.length) members=p; }
+  } catch(e) { expenses=[]; }
+  renderAll();
+  if (!isCloud) setSync('💾 Local mode (setup cloud above)', 'warn');
+}
+function saveLocal() {
+  localStorage.setItem(LS_EXP + mKey(), JSON.stringify(expenses));
+  localStorage.setItem(LS_MEM, JSON.stringify(members));
+}
+
+// ── RENDER ───────────────────────────────────────────────────────────────────
+function renderAll() {
+  const ml = MONTHS[curMonth]+' '+curYear;
+  document.getElementById('pageTitle').textContent = ml;
+  document.getElementById('monthName').textContent = ml;
+  renderChips(); renderSummary(); renderList(); renderBars();
+}
+function renderChips() {
+  const w = document.getElementById('memberChips'); w.innerHTML='';
+  members.forEach(m => {
+    const c = document.createElement('span'); c.className='chip'+(m===selMember?' active':''); c.textContent=m;
+    c.onclick = () => { selMember=m; renderChips(); }; w.appendChild(c);
+  });
+}
+function renderSummary() {
+  const total=expenses.reduce((s,e)=>s+e.amount,0), uniq=new Set(expenses.map(e=>e.member)).size, avg=expenses.length?total/expenses.length:0;
+  document.getElementById('sTotal').textContent=fmt(total); document.getElementById('sCount').textContent=expenses.length+' entries';
+  document.getElementById('sMembers').textContent=uniq; document.getElementById('sAvg').textContent=fmt(avg);
+  const bc={}; expenses.forEach(e=>bc[e.category]=(bc[e.category]||0)+e.amount);
+  const top=Object.entries(bc).sort((a,b)=>b[1]-a[1])[0];
+  document.getElementById('sTopCat').textContent=top?CAT_ICONS[top[0]]+' '+top[0]:'\u2014';
+  document.getElementById('sTopAmt').textContent=top?fmt(top[1]):'\u20b90';
+}
+function renderList() {
+  const list=document.getElementById('expList'), sorted=[...expenses].sort((a,b)=>b.ts-a.ts);
+  if(!sorted.length){list.innerHTML='<div class="empty">No expenses this month</div>';return;}
+  list.innerHTML='';
+  sorted.forEach(e=>{
+    const d=new Date(e.ts), ds=d.getDate()+' '+MONTHS[d.getMonth()].slice(0,3);
+    const el=document.createElement('div'); el.className='exp-item';
+    el.innerHTML=`<div class="cat-dot" style="background:${CAT_COLORS[e.category]||'#888'}"></div><div class="exp-info"><div class="exp-desc">${esc(e.desc)}</div><div class="exp-meta">${esc(e.member)} · ${e.category} · ${ds}</div></div><div class="exp-amt">${fmt(e.amount)}</div><button class="exp-del">✕</button>`;
+    el.querySelector('.exp-del').onclick = async()=>{ expenses=expenses.filter(x=>x.id!==e.id); renderAll(); isCloud?await cloudSave():saveLocal(); showToast('Deleted'); };
+    list.appendChild(el);
+  });
+}
+function renderBars() {
+  const bc={};expenses.forEach(e=>bc[e.category]=(bc[e.category]||0)+e.amount);
+  const sorted=Object.entries(bc).sort((a,b)=>b[1]-a[1]), wrap=document.getElementById('bars');
+  if(!sorted.length){wrap.innerHTML='<div class="empty">No data yet — add your first expense!</div>';return;}
+  const max=sorted[0][1]; wrap.innerHTML='';
+  sorted.forEach(([cat,amt])=>{
+    const pct=Math.round((amt/max)*100), row=document.createElement('div'); row.className='bar-row';
+    row.innerHTML=`<div class="bar-lbl">${CAT_ICONS[cat]||''} ${cat}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${CAT_COLORS[cat]}"></div></div><div class="bar-val">${fmt(amt)}</div>`;
+    wrap.appendChild(row);
+  });
+}
+
+// ── EVENTS ───────────────────────────────────────────────────────────────────
+document.getElementById('addBtn').onclick = async () => {
+  const desc=document.getElementById('descIn').value.trim(), amt=parseFloat(document.getElementById('amtIn').value), cat=document.getElementById('catIn').value;
+  if(!desc||!amt||amt<=0){showToast('Please fill description & amount');return;}
+  const nm=document.getElementById('newMemberIn').value.trim();
+  if(nm&&!members.includes(nm)){members.push(nm);selMember=nm;}
+  expenses.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2),desc,amount:amt,category:cat,member:selMember,ts:Date.now()});
+  document.getElementById('descIn').value=''; document.getElementById('amtIn').value=''; document.getElementById('newMemberIn').value='';
+  renderAll();
+  isCloud ? await cloudSave() : saveLocal();
+  showToast('Expense added ✓');
+};
+document.getElementById('newMemberIn').addEventListener('keydown', async e=>{
+  if(e.key!=='Enter')return;
+  const v=e.target.value.trim();
+  if(v&&!members.includes(v)){members.push(v);selMember=v;renderChips();isCloud?await cloudSave():saveLocal();}
+  e.target.value='';
+});
+document.getElementById('prevBtn').onclick = ()=>{ if(pollTimer)clearInterval(pollTimer); curMonth--;if(curMonth<0){curMonth=11;curYear--;} isCloud?cloudLoad():loadLocal(); };
+document.getElementById('nextBtn').onclick = ()=>{ if(pollTimer)clearInterval(pollTimer); curMonth++;if(curMonth>11){curMonth=0;curYear++;} isCloud?cloudLoad():loadLocal(); };
+
+// ── TEST BUTTON ───────────────────────────────────────────────────────────────
+function dbg(msg) {
+  const box = document.getElementById('debugBox');
+  box.style.display = 'block';
+  box.textContent += msg + '\n';
+  box.scrollTop = box.scrollHeight;
+}
+document.getElementById('cfgTest').onclick = async () => {
+  const box = document.getElementById('debugBox');
+  box.style.display = 'block'; box.textContent = '';
+  const u = document.getElementById('cfgUrl').value.trim().replace(/\/$/,'');
+  const k = document.getElementById('cfgKey').value.trim();
+  if (!u || !k) { dbg('Please fill in URL and API key first'); return; }
+  dbg('Testing with Supabase SDK...');
+  try {
+    const testClient = createClient(u, k);
+    dbg('[1] Connecting...');
+    const { data, error } = await testClient.from('expenses').select('id').limit(1);
+    if (error) {
+      dbg('    ERROR: ' + error.message + ' (code: ' + error.code + ')');
+      if (error.code === 'PGRST301' || error.message.includes('JWT')) dbg('    FIX: API key is wrong — copy the "anon public" key from Supabase Settings > API');
+      else if (error.code === '42P01') dbg('    FIX: Table not found — run the SQL in Supabase SQL Editor');
+      else if (error.code === '42501' || error.message.includes('policy')) dbg('    FIX: RLS blocking — run the policy SQL in Supabase SQL Editor');
+      else dbg('    FIX: Check your Project URL is correct (Settings > API > Project URL)');
+    } else {
+      dbg('    OK: Connected! expenses table found');
+      const { error: e2 } = await testClient.from('members').select('id').limit(1);
+      if (e2) dbg('[2] members table ERROR: ' + e2.message + '\n    FIX: Run the SQL block above');
+      else dbg('[2] OK: members table found');
+      dbg('\nAll checks passed! Click Save & Connect.');
+    }
+  } catch(e) {
+    dbg('    NETWORK ERROR: ' + e.message);
+    dbg('    FIX: Make sure the URL is exactly like: https://abcxyz.supabase.co');
+  }
+};
+
+// ── SETUP SAVE ────────────────────────────────────────────────────────────────
+document.getElementById('cfgSave').onclick = () => {
+  const u=document.getElementById('cfgUrl').value.trim().replace(/\/$/,'');
+  const k=document.getElementById('cfgKey').value.trim();
+  if(!u||!k){showToast('Please fill both fields');return;}
+  localStorage.setItem(LS_URL,u); localStorage.setItem(LS_KEY,k);
+  sbClient = createClient(u, k);
+  isCloud=true;
+  document.getElementById('setupCard').style.display='none';
+  cloudLoad();
+};
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+const savedUrl = localStorage.getItem(LS_URL)||'';
+const savedKey = localStorage.getItem(LS_KEY)||'';
+if(savedUrl && savedKey) {
+  sbClient = createClient(savedUrl, savedKey);
+  isCloud = true;
+  cloudLoad();
+} else {
+  document.getElementById('setupCard').style.display='block';
+  loadLocal();
+  setSync('💾 Local mode', 'warn');
+}
+</script>
+</body>
+</html>
